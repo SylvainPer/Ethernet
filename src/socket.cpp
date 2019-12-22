@@ -39,7 +39,7 @@ typedef struct {
 } socketstate_t;
 
 static socketstate_t state[MAX_SOCK_NUM];
-
+static unsigned long _time_last_tx[MAX_SOCK_NUM];
 
 static uint16_t getSnTX_FSR(uint8_t s);
 static uint16_t getSnRX_RSR(uint8_t s);
@@ -96,6 +96,13 @@ uint8_t EthernetClass::socketBegin(uint8_t protocol, uint16_t port)
 	}
 #endif
 	SPI.endTransaction();
+    //check timeout
+	for (s=0; s < maxindex; s++) {
+		if (status[s] == SnSR::ESTABLISHED)
+        	{
+            		if (((millis() - _time_last_tx[s])/1000) > 1800) goto closemakesocket;
+        	}	
+	}
 	return MAX_SOCK_NUM; // all sockets are in use
 closemakesocket:
 	//Serial.printf("W5000socket close\n");
@@ -120,6 +127,7 @@ makesocket:
 	state[s].TX_FSR = 0;
 	//Serial.printf("W5000socket prot=%d, RX_RD=%d\n", W5100.readSnMR(s), state[s].RX_RD);
 	SPI.endTransaction();
+	_time_last_tx[s] = millis();
 	return s;
 }
 
@@ -212,6 +220,7 @@ void EthernetClass::socketClose(uint8_t s)
 	SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
 	W5100.execCmdSn(s, Sock_CLOSE);
 	SPI.endTransaction();
+	_time_last_tx[s] = 0;
 }
 
 
@@ -251,6 +260,7 @@ void EthernetClass::socketDisconnect(uint8_t s)
 	SPI.beginTransaction(SPI_ETHERNET_SETTINGS);
 	W5100.execCmdSn(s, Sock_DISCON);
 	SPI.endTransaction();
+	_time_last_tx[s] = 0;
 }
 
 
@@ -463,6 +473,7 @@ uint16_t EthernetClass::socketSend(uint8_t s, const uint8_t * buf, uint16_t len)
 	/* +2008.01 bj */
 	W5100.writeSnIR(s, SnIR::SEND_OK);
 	SPI.endTransaction();
+	_time_last_tx[s] = millis();
 	return ret;
 }
 
